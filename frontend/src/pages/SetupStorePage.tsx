@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FormField } from '../components/FormField';
 import { post, ApiError } from '../services/api';
 import { ApiResponse, Store, TaxRegime } from '../types';
@@ -104,7 +103,6 @@ const styles = {
 };
 
 export function SetupStorePage() {
-  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [cnpj, setCnpj] = useState('');
   const [taxRegime, setTaxRegime] = useState('');
@@ -153,7 +151,8 @@ export function SetupStorePage() {
         cnpj: cnpj.replace(/\D/g, ''),
         taxRegime: taxRegime as TaxRegime,
       });
-      navigate('/tax-config');
+      // Force full reload so useStore detects the new store and shows layout with sidebar
+      window.location.href = '/tax-config';
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.details && err.details.length > 0) {

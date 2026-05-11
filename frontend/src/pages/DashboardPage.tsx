@@ -94,12 +94,12 @@ export function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [metricsData, salesData] = await Promise.all([
-        get<DashboardMetrics>(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`),
-        get<Sale[]>(`/api/sales?startDate=${startDate}&endDate=${endDate}`),
+      const [metricsResponse, salesResponse] = await Promise.all([
+        get<{ data: DashboardMetrics }>(`/api/dashboard?startDate=${startDate}&endDate=${endDate}`),
+        get<{ data: Sale[] }>(`/api/sales?startDate=${startDate}&endDate=${endDate}`),
       ]);
-      setMetrics(metricsData);
-      setSales(salesData);
+      setMetrics(metricsResponse.data);
+      setSales(salesResponse.data);
       setError('');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao carregar dados do dashboard';

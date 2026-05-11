@@ -27,6 +27,14 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/amazon_sales?schema=public
       PORT: "3001"
       NODE_ENV: development
+      SP_API_CLIENT_ID: ${SP_API_CLIENT_ID:-}
+      SP_API_CLIENT_SECRET: ${SP_API_CLIENT_SECRET:-}
+      SP_API_APP_ID: ${SP_API_APP_ID:-}
+      SP_API_REDIRECT_URI: http://localhost:3001/api/integration/callback
+      SP_API_MARKETPLACE_ID: A2Q3Y263D00KWC
+      SP_API_AWS_ACCESS_KEY: ${SP_API_AWS_ACCESS_KEY:-}
+      SP_API_AWS_SECRET_KEY: ${SP_API_AWS_SECRET_KEY:-}
+      SP_API_ROLE_ARN: ${SP_API_ROLE_ARN:-}
     volumes:
       - ./api/src:/app/src
       - ./api/prisma:/app/prisma

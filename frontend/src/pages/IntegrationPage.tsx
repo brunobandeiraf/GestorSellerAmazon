@@ -1,37 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FormField } from '../components/FormField';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ProgressBar } from '../components/ProgressBar';
 import { get, post, ApiError } from '../services/api';
-import { ApiResponse, Integration, IntegrationInput, IntegrationStatus, SyncProgress } from '../types';
-
-interface FormErrors {
-  clientId?: string;
-  clientSecret?: string;
-  refreshToken?: string;
-  awsAccessKeyId?: string;
-  awsSecretAccessKey?: string;
-  roleArn?: string;
-}
-
-/** Parsed error message for PARTIAL status */
-interface PartialErrorInfo {
-  message: string;
-  failedBatches: Array<{ startDate: string; endDate: string; error: string }>;
-  totalImported: number;
-}
-
-/** Parsed completion info */
-interface CompletionInfo {
-  totalImported: number;
-}
+import { ApiResponse, Integration, IntegrationStatus, SyncProgress } from '../types';
 
 const styles = {
   container: {
-    maxWidth: '560px',
-    margin: '40px auto',
-    padding: '32px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    maxWidth: '600px',
   } as React.CSSProperties,
   title: {
     fontSize: '24px',
@@ -44,19 +19,43 @@ const styles = {
     color: '#666',
     marginBottom: '24px',
   } as React.CSSProperties,
-  button: {
-    width: '100%',
-    padding: '10px 16px',
-    fontSize: '14px',
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb',
+    padding: '24px',
+    marginBottom: '24px',
+    textAlign: 'center' as const,
+  } as React.CSSProperties,
+  section: {
+    backgroundColor: '#fff',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb',
+    padding: '24px',
+    marginBottom: '24px',
+  } as React.CSSProperties,
+  sectionTitle: {
+    fontSize: '16px',
+    fontWeight: 600,
+    marginBottom: '12px',
+    color: '#1a1a1a',
+  } as React.CSSProperties,
+  connectButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '14px 28px',
+    fontSize: '16px',
     fontWeight: 600,
     color: '#fff',
-    backgroundColor: '#0066cc',
+    backgroundColor: '#ff9900',
     border: 'none',
-    borderRadius: '4px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    marginTop: '8px',
+    textDecoration: 'none',
+    marginTop: '16px',
   } as React.CSSProperties,
-  buttonDisabled: {
+  connectButtonDisabled: {
     opacity: 0.6,
     cursor: 'not-allowed',
   } as React.CSSProperties,
@@ -125,30 +124,32 @@ const styles = {
   } as React.CSSProperties,
   statusBadge: {
     display: 'inline-block',
-    padding: '4px 10px',
+    padding: '6px 14px',
     borderRadius: '12px',
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: 600,
     marginBottom: '16px',
-  } as React.CSSProperties,
-  section: {
-    marginTop: '24px',
-    padding: '20px',
-    backgroundColor: '#f9fafb',
-    borderRadius: '8px',
-    border: '1px solid #e5e7eb',
-  } as React.CSSProperties,
-  sectionTitle: {
-    fontSize: '16px',
-    fontWeight: 600,
-    marginBottom: '12px',
-    color: '#1a1a1a',
   } as React.CSSProperties,
   loading: {
     textAlign: 'center' as const,
     padding: '60px 20px',
     color: '#666',
     fontSize: '14px',
+  } as React.CSSProperties,
+  infoText: {
+    fontSize: '14px',
+    color: '#6b7280',
+    lineHeight: 1.6,
+    marginBottom: '16px',
+  } as React.CSSProperties,
+  credentialInfo: {
+    fontSize: '13px',
+    color: '#6b7280',
+    backgroundColor: '#f9fafb',
+    padding: '12px',
+    borderRadius: '6px',
+    marginTop: '12px',
+    textAlign: 'left' as const,
   } as React.CSSProperties,
 };
 
@@ -166,21 +167,12 @@ const STATUS_LABELS: Record<IntegrationStatus, string> = {
 
 export function IntegrationPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [integration, setIntegration] = useState<Integration | null>(null);
-
-  // Form fields
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
-  const [refreshToken, setRefreshToken] = useState('');
-  const [awsAccessKeyId, setAwsAccessKeyId] = useState('');
-  const [awsSecretAccessKey, setAwsSecretAccessKey] = useState('');
-  const [roleArn, setRoleArn] = useState('');
-
-  const [errors, setErrors] = useState<FormErrors>({});
   const [serverError, setServerError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Products sync state
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
@@ -193,262 +185,146 @@ export function IntegrationPage() {
   const [isSyncingSales, setIsSyncingSales] = useState(false);
   const [salesSyncComplete, setSalesSyncComplete] = useState(false);
   const [salesPartial, setSalesPartial] = useState(false);
-  const [salesPartialInfo, setSalesPartialInfo] = useState<PartialErrorInfo | null>(null);
-  const [salesTotalImported, setSalesTotalImported] = useState<number | null>(null);
   const salesPollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load existing integration status
+  // Check URL params for OAuth callback results
+  useEffect(() => {
+    const connected = searchParams.get('connected');
+    const error = searchParams.get('error');
+
+    if (connected === 'true') {
+      setSuccessMessage('Conta Amazon conectada com sucesso! Seus produtos e vendas serão importados automaticamente.');
+    } else if (error) {
+      const errorMessages: Record<string, string> = {
+        no_code: 'Autorização não foi concedida pela Amazon.',
+        token_exchange_failed: 'Falha ao obter token de acesso. Verifique as credenciais do app.',
+        no_store: 'Cadastre a loja antes de conectar a Amazon.',
+        callback_failed: 'Erro durante a autorização. Tente novamente.',
+      };
+      setServerError(errorMessages[error] || 'Erro desconhecido durante a autorização.');
+    }
+  }, [searchParams]);
+
+  // Load integration status
   useEffect(() => {
     async function loadStatus() {
       try {
-        const response = await get<ApiResponse<Integration>>('/api/integration/status');
+        const response = await get<ApiResponse<Integration | null>>('/api/integration/status');
         setIntegration(response.data);
       } catch (err) {
         if (err instanceof ApiError && err.statusCode === 404) {
           setIntegration(null);
         } else if (err instanceof ApiError) {
           setServerError(err.message);
-        } else {
-          setServerError('Erro ao carregar status da integração.');
         }
       } finally {
         setLoading(false);
       }
     }
-
     loadStatus();
   }, []);
 
-  // Check sales history progress on mount (if integration is active)
+  // Check sales progress when connected
   useEffect(() => {
     if (integration?.status === 'ACTIVE') {
       checkSalesProgress();
     }
   }, [integration]);
 
-  // Cleanup polling on unmount
+  // Cleanup
   useEffect(() => {
     return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current);
-      }
-      if (salesPollIntervalRef.current) {
-        clearInterval(salesPollIntervalRef.current);
-      }
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+      if (salesPollIntervalRef.current) clearInterval(salesPollIntervalRef.current);
     };
   }, []);
 
   function checkSalesProgress() {
     get<ApiResponse<SyncProgress | null>>('/api/integration/sync/progress?type=SALES_HISTORY')
       .then((response) => {
-        const progress = response.data;
-        if (!progress) return;
-
-        setSalesProgress(progress);
-
-        if (progress.status === 'IN_PROGRESS') {
+        if (!response.data) return;
+        setSalesProgress(response.data);
+        if (response.data.status === 'IN_PROGRESS') {
           setIsSyncingSales(true);
           pollSalesProgress();
-        } else if (progress.status === 'COMPLETED') {
+        } else if (response.data.status === 'COMPLETED') {
           setSalesSyncComplete(true);
-          parseSalesCompletionInfo(progress);
-        } else if (progress.status === 'PARTIAL') {
+        } else if (response.data.status === 'PARTIAL') {
           setSalesPartial(true);
-          parseSalesPartialInfo(progress);
         }
       })
-      .catch(() => {
-        // Silently ignore
-      });
+      .catch(() => {});
   }
 
-  function parseSalesCompletionInfo(progress: SyncProgress) {
+  async function handleConnectAmazon() {
+    setIsConnecting(true);
+    setServerError('');
     try {
-      if (progress.errorMessage) {
-        const info: CompletionInfo = JSON.parse(progress.errorMessage);
-        setSalesTotalImported(info.totalImported);
+      const response = await get<ApiResponse<{ authUrl: string }>>('/api/integration/auth-url');
+      // Redirect user to Amazon authorization page
+      window.location.href = response.data.authUrl;
+    } catch (err) {
+      setIsConnecting(false);
+      if (err instanceof ApiError) {
+        setServerError(err.message);
+      } else {
+        setServerError('Erro ao iniciar conexão com a Amazon.');
       }
-    } catch {
-      // errorMessage might not be JSON for completed jobs
-    }
-  }
-
-  function parseSalesPartialInfo(progress: SyncProgress) {
-    try {
-      if (progress.errorMessage) {
-        const info: PartialErrorInfo = JSON.parse(progress.errorMessage);
-        setSalesPartialInfo(info);
-        setSalesTotalImported(info.totalImported);
-      }
-    } catch {
-      // Fallback if errorMessage is not JSON
     }
   }
 
   const pollProgress = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-    }
-
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     pollIntervalRef.current = setInterval(async () => {
       try {
         const response = await get<ApiResponse<SyncProgress>>('/api/integration/sync/progress?type=PRODUCTS');
-        const progress = response.data;
-        setSyncProgress(progress);
-
-        if (progress.status === 'COMPLETED') {
+        setSyncProgress(response.data);
+        if (response.data.status === 'COMPLETED') {
           setIsSyncing(false);
           setSyncComplete(true);
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
-        } else if (progress.status === 'FAILED') {
+          clearInterval(pollIntervalRef.current!);
+        } else if (response.data.status === 'FAILED') {
           setIsSyncing(false);
-          setServerError(progress.errorMessage || 'Erro durante a importação de produtos.');
-          if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-          }
+          setServerError(response.data.errorMessage || 'Erro na importação de produtos.');
+          clearInterval(pollIntervalRef.current!);
         }
-      } catch {
-        // Silently ignore polling errors
-      }
+      } catch {}
     }, 3000);
   }, []);
 
   const pollSalesProgress = useCallback(() => {
-    if (salesPollIntervalRef.current) {
-      clearInterval(salesPollIntervalRef.current);
-    }
-
+    if (salesPollIntervalRef.current) clearInterval(salesPollIntervalRef.current);
     salesPollIntervalRef.current = setInterval(async () => {
       try {
         const response = await get<ApiResponse<SyncProgress>>('/api/integration/sync/progress?type=SALES_HISTORY');
-        const progress = response.data;
-        setSalesProgress(progress);
-
-        if (progress.status === 'COMPLETED') {
+        setSalesProgress(response.data);
+        if (response.data.status === 'COMPLETED') {
           setIsSyncingSales(false);
           setSalesSyncComplete(true);
-          parseSalesCompletionInfo(progress);
-          if (salesPollIntervalRef.current) {
-            clearInterval(salesPollIntervalRef.current);
-            salesPollIntervalRef.current = null;
-          }
-        } else if (progress.status === 'FAILED') {
+          clearInterval(salesPollIntervalRef.current!);
+        } else if (response.data.status === 'FAILED') {
           setIsSyncingSales(false);
-          setServerError(progress.errorMessage || 'Erro durante a importação de vendas históricas.');
-          if (salesPollIntervalRef.current) {
-            clearInterval(salesPollIntervalRef.current);
-            salesPollIntervalRef.current = null;
-          }
-        } else if (progress.status === 'PARTIAL') {
+          setServerError(response.data.errorMessage || 'Erro na importação de vendas.');
+          clearInterval(salesPollIntervalRef.current!);
+        } else if (response.data.status === 'PARTIAL') {
           setIsSyncingSales(false);
           setSalesPartial(true);
-          parseSalesPartialInfo(progress);
-          if (salesPollIntervalRef.current) {
-            clearInterval(salesPollIntervalRef.current);
-            salesPollIntervalRef.current = null;
-          }
+          clearInterval(salesPollIntervalRef.current!);
         }
-      } catch {
-        // Silently ignore polling errors
-      }
+      } catch {}
     }, 3000);
   }, []);
-
-  function validateForm(): FormErrors {
-    const formErrors: FormErrors = {};
-
-    if (!clientId.trim()) formErrors.clientId = 'Client ID é obrigatório';
-    if (!clientSecret.trim()) formErrors.clientSecret = 'Client Secret é obrigatório';
-    if (!refreshToken.trim()) formErrors.refreshToken = 'Refresh Token é obrigatório';
-    if (!awsAccessKeyId.trim()) formErrors.awsAccessKeyId = 'AWS Access Key ID é obrigatório';
-    if (!awsSecretAccessKey.trim()) formErrors.awsSecretAccessKey = 'AWS Secret Access Key é obrigatório';
-    if (!roleArn.trim()) formErrors.roleArn = 'Role ARN é obrigatório';
-
-    return formErrors;
-  }
-
-  async function handleConnect(e: React.FormEvent) {
-    e.preventDefault();
-    setServerError('');
-    setSuccessMessage('');
-
-    const formErrors = validateForm();
-    setErrors(formErrors);
-
-    if (Object.keys(formErrors).length > 0) {
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const payload: IntegrationInput = {
-        clientId: clientId.trim(),
-        clientSecret: clientSecret.trim(),
-        refreshToken: refreshToken.trim(),
-        awsAccessKeyId: awsAccessKeyId.trim(),
-        awsSecretAccessKey: awsSecretAccessKey.trim(),
-        roleArn: roleArn.trim(),
-      };
-
-      const response = await post<ApiResponse<Integration>>('/api/integration/connect', payload);
-      setIntegration(response.data);
-      setSuccessMessage('Conexão realizada com sucesso!');
-
-      // If connection is active, start polling for sales history progress
-      // (the backend auto-triggers importHistoricalSales after connect)
-      if (response.data.status === 'ACTIVE') {
-        setIsSyncingSales(true);
-        // Small delay to let the backend create the SyncJob
-        setTimeout(() => {
-          pollSalesProgress();
-        }, 2000);
-      }
-    } catch (err) {
-      if (err instanceof ApiError) {
-        if (err.details && err.details.length > 0) {
-          const fieldErrors: FormErrors = {};
-          for (const detail of err.details) {
-            const key = detail.field as keyof FormErrors;
-            if (key in formErrors) {
-              fieldErrors[key] = detail.message;
-            }
-          }
-          if (Object.keys(fieldErrors).length > 0) {
-            setErrors(fieldErrors);
-          } else {
-            setServerError(err.message);
-          }
-        } else {
-          setServerError(err.message);
-        }
-      } else {
-        setServerError('Erro ao conectar com o servidor. Tente novamente.');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
 
   async function handleImportProducts() {
     setServerError('');
     setSyncComplete(false);
     setIsSyncing(true);
-
     try {
-      await post<ApiResponse<SyncProgress>>('/api/integration/sync/products', {});
+      await post('/api/integration/sync/products', {});
       pollProgress();
     } catch (err) {
       setIsSyncing(false);
-      if (err instanceof ApiError) {
-        setServerError(err.message);
-      } else {
-        setServerError('Erro ao iniciar importação de produtos.');
-      }
+      if (err instanceof ApiError) setServerError(err.message);
     }
   }
 
@@ -456,57 +332,33 @@ export function IntegrationPage() {
     setServerError('');
     setSalesSyncComplete(false);
     setSalesPartial(false);
-    setSalesPartialInfo(null);
-    setSalesTotalImported(null);
     setIsSyncingSales(true);
-
     try {
       await post('/api/integration/sync/sales', {});
       pollSalesProgress();
     } catch (err) {
       setIsSyncingSales(false);
-      if (err instanceof ApiError) {
-        setServerError(err.message);
-      } else {
-        setServerError('Erro ao iniciar importação de vendas históricas.');
-      }
+      if (err instanceof ApiError) setServerError(err.message);
     }
   }
 
-  function handleGoToProducts() {
-    navigate('/products');
-  }
-
   if (loading) {
-    return (
-      <div style={styles.loading}>
-        <p>Carregando integração...</p>
-      </div>
-    );
+    return <div style={styles.loading}>Carregando integração...</div>;
   }
 
   const isConnected = integration?.status === 'ACTIVE';
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>Integração Amazon SP-API</h1>
+      <h1 style={styles.title}>Integração Amazon</h1>
       <p style={styles.subtitle}>
-        Conecte sua conta Amazon para importar produtos e sincronizar vendas.
+        Conecte sua conta Amazon Seller Central para importar produtos e vendas automaticamente.
       </p>
 
-      {serverError && (
-        <div style={styles.serverError} role="alert">
-          {serverError}
-        </div>
-      )}
+      {serverError && <div style={styles.serverError} role="alert">{serverError}</div>}
+      {successMessage && <div style={styles.successMessage} role="status">{successMessage}</div>}
 
-      {successMessage && (
-        <div style={styles.successMessage} role="status">
-          {successMessage}
-        </div>
-      )}
-
-      {/* Connection Status Badge */}
+      {/* Status Badge */}
       {integration && (
         <span style={{ ...styles.statusBadge, ...STATUS_STYLES[integration.status] }}>
           {STATUS_LABELS[integration.status]}
@@ -514,203 +366,115 @@ export function IntegrationPage() {
       )}
 
       {integration?.status === 'ERROR' && integration.lastError && (
-        <div style={styles.serverError} role="alert">
-          Último erro: {integration.lastError}
-        </div>
+        <div style={styles.serverError}>Último erro: {integration.lastError}</div>
       )}
 
-      {/* Credentials Form */}
-      {(!integration || integration.status === 'ERROR' || integration.status === 'PENDING') && (
-        <form onSubmit={handleConnect} noValidate>
-          <FormField
-            label="Client ID"
-            name="clientId"
-            value={clientId}
-            onChange={setClientId}
-            error={errors.clientId}
-            placeholder="amzn1.application-oa2-client.xxx"
-            required
-          />
-          <FormField
-            label="Client Secret"
-            name="clientSecret"
-            value={clientSecret}
-            onChange={setClientSecret}
-            error={errors.clientSecret}
-            placeholder="Seu Client Secret"
-            required
-          />
-          <FormField
-            label="Refresh Token"
-            name="refreshToken"
-            value={refreshToken}
-            onChange={setRefreshToken}
-            error={errors.refreshToken}
-            placeholder="Atzr|xxx"
-            required
-          />
-          <FormField
-            label="AWS Access Key ID"
-            name="awsAccessKeyId"
-            value={awsAccessKeyId}
-            onChange={setAwsAccessKeyId}
-            error={errors.awsAccessKeyId}
-            placeholder="AKIAIOSFODNN7EXAMPLE"
-            required
-          />
-          <FormField
-            label="AWS Secret Access Key"
-            name="awsSecretAccessKey"
-            value={awsSecretAccessKey}
-            onChange={setAwsSecretAccessKey}
-            error={errors.awsSecretAccessKey}
-            placeholder="Sua AWS Secret Access Key"
-            required
-          />
-          <FormField
-            label="Role ARN"
-            name="roleArn"
-            value={roleArn}
-            onChange={setRoleArn}
-            error={errors.roleArn}
-            placeholder="arn:aws:iam::123456789012:role/SellingPartnerRole"
-            required
-          />
+      {/* Connect Section - shown when not connected */}
+      {!isConnected && (
+        <div style={styles.card}>
+          <p style={styles.infoText}>
+            Clique no botão abaixo para autorizar o acesso à sua conta Amazon Seller Central.
+            Você será redirecionado para a Amazon para conceder permissão.
+          </p>
 
           <button
-            type="submit"
-            disabled={isSubmitting}
-            style={
-              isSubmitting
-                ? { ...styles.button, ...styles.buttonDisabled }
-                : styles.button
-            }
+            onClick={handleConnectAmazon}
+            disabled={isConnecting}
+            style={isConnecting ? { ...styles.connectButton, ...styles.connectButtonDisabled } : styles.connectButton}
           >
-            {isSubmitting ? 'Testando conexão...' : 'Conectar e Testar'}
+            🔗 {isConnecting ? 'Redirecionando...' : 'Conectar com Amazon'}
           </button>
-        </form>
+
+          <div style={styles.credentialInfo}>
+            <strong>Como funciona:</strong><br />
+            1. Você será redirecionado para o Amazon Seller Central<br />
+            2. Autorize o aplicativo "Amazon Sales Manager"<br />
+            3. Será redirecionado de volta automaticamente<br />
+            4. Seus produtos e vendas serão importados
+          </div>
+        </div>
       )}
 
-      {/* Sync Section - shown after successful connection */}
+      {/* Connected - Show sync options */}
       {isConnected && (
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Importação de Produtos</h2>
+        <>
+          {/* Products Section */}
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Importação de Produtos</h2>
 
-          {/* Import progress */}
-          {isSyncing && syncProgress && (
-            <ProgressBar
-              progress={syncProgress.progress}
-              statusText={
-                syncProgress.processedItems != null && syncProgress.totalItems != null
-                  ? `Importando... ${syncProgress.processedItems} de ${syncProgress.totalItems} produtos`
-                  : `Importando... ${Math.round(syncProgress.progress)}%`
-              }
-            />
-          )}
-
-          {isSyncing && !syncProgress && (
-            <ProgressBar
-              progress={0}
-              statusText="Iniciando importação..."
-            />
-          )}
-
-          {/* Import complete */}
-          {syncComplete && syncProgress && (
-            <>
+            {isSyncing && syncProgress && (
               <ProgressBar
-                progress={100}
+                progress={syncProgress.progress}
                 statusText={
-                  syncProgress.processedItems != null
-                    ? `Importação concluída! ${syncProgress.processedItems} produtos importados.`
-                    : 'Importação concluída!'
+                  syncProgress.processedItems != null && syncProgress.totalItems != null
+                    ? `Importando... ${syncProgress.processedItems} de ${syncProgress.totalItems} produtos`
+                    : `Importando... ${Math.round(syncProgress.progress)}%`
                 }
               />
-              <button
-                type="button"
-                onClick={handleGoToProducts}
-                style={styles.buttonSuccess}
-              >
-                Ir para Produtos
+            )}
+
+            {isSyncing && !syncProgress && (
+              <ProgressBar progress={0} statusText="Iniciando importação..." />
+            )}
+
+            {syncComplete && (
+              <>
+                <ProgressBar
+                  progress={100}
+                  statusText={syncProgress?.processedItems ? `${syncProgress.processedItems} produtos importados!` : 'Importação concluída!'}
+                />
+                <button type="button" onClick={() => navigate('/products')} style={styles.buttonSuccess}>
+                  Ir para Produtos
+                </button>
+              </>
+            )}
+
+            {!isSyncing && !syncComplete && (
+              <button type="button" onClick={handleImportProducts} style={styles.buttonSecondary}>
+                Importar Produtos
               </button>
-            </>
-          )}
+            )}
+          </div>
 
-          {/* Import button - shown when not syncing and not complete */}
-          {!isSyncing && !syncComplete && (
-            <button
-              type="button"
-              onClick={handleImportProducts}
-              style={styles.buttonSecondary}
-            >
-              Importar Produtos
-            </button>
-          )}
-        </div>
-      )}
+          {/* Sales History Section */}
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>Vendas Históricas</h2>
 
-      {/* Sales History Section - shown after successful connection */}
-      {isConnected && (
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Vendas Históricas</h2>
+            {isSyncingSales && salesProgress && (
+              <ProgressBar
+                progress={salesProgress.progress}
+                statusText={
+                  salesProgress.processedItems != null && salesProgress.totalItems != null
+                    ? `Importando... ${salesProgress.processedItems} de ${salesProgress.totalItems} períodos`
+                    : `Importando... ${Math.round(salesProgress.progress)}%`
+                }
+              />
+            )}
 
-          {/* Sales import in progress */}
-          {isSyncingSales && salesProgress && (
-            <ProgressBar
-              progress={salesProgress.progress}
-              statusText={
-                salesProgress.processedItems != null && salesProgress.totalItems != null
-                  ? `Importando vendas... ${salesProgress.processedItems} de ${salesProgress.totalItems} períodos processados`
-                  : `Importando vendas... ${Math.round(salesProgress.progress)}%`
-              }
-            />
-          )}
+            {isSyncingSales && !salesProgress && (
+              <ProgressBar progress={0} statusText="Iniciando importação de vendas..." />
+            )}
 
-          {isSyncingSales && !salesProgress && (
-            <ProgressBar
-              progress={0}
-              statusText="Iniciando importação de vendas históricas..."
-            />
-          )}
+            {salesSyncComplete && !salesPartial && (
+              <div style={styles.successMessage}>Importação de vendas históricas concluída!</div>
+            )}
 
-          {/* Sales import complete */}
-          {salesSyncComplete && !salesPartial && (
-            <div style={styles.successMessage} role="status">
-              {salesTotalImported != null
-                ? `Importação concluída! ${salesTotalImported} vendas importadas.`
-                : 'Importação de vendas históricas concluída!'}
-            </div>
-          )}
+            {salesPartial && (
+              <>
+                <div style={styles.warningMessage}>Importação parcial: alguns períodos falharam.</div>
+                <button type="button" onClick={handleImportSales} style={styles.buttonWarning}>
+                  Retentar períodos com falha
+                </button>
+              </>
+            )}
 
-          {/* Sales import partial - some batches failed */}
-          {salesPartial && (
-            <>
-              <div style={styles.warningMessage} role="alert">
-                {salesPartialInfo
-                  ? `${salesPartialInfo.message}. ${salesPartialInfo.totalImported} vendas importadas com sucesso.`
-                  : 'Importação parcial: alguns períodos falharam.'}
-              </div>
-              <button
-                type="button"
-                onClick={handleImportSales}
-                style={styles.buttonWarning}
-              >
-                Retentar períodos com falha
+            {!isSyncingSales && !salesSyncComplete && !salesPartial && (
+              <button type="button" onClick={handleImportSales} style={styles.buttonSecondary}>
+                Importar Vendas Históricas
               </button>
-            </>
-          )}
-
-          {/* Import sales button - shown when not syncing and not complete/partial */}
-          {!isSyncingSales && !salesSyncComplete && !salesPartial && (
-            <button
-              type="button"
-              onClick={handleImportSales}
-              style={styles.buttonSecondary}
-            >
-              Importar Vendas Históricas
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

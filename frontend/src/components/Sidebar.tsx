@@ -45,7 +45,7 @@ const navItems = [
   { to: '/products', label: 'Produtos' },
   { to: '/sales', label: 'Vendas' },
   { to: '/integration', label: 'Integração' },
-  { to: '/tax-config', label: 'Impostos' },
+  { to: '/settings', label: 'Configurações' },
 ];
 
 export function Sidebar() {

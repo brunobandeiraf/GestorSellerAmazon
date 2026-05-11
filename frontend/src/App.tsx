@@ -5,6 +5,7 @@ import { IntegrationPage } from './pages/IntegrationPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { SalesHistoryPage } from './pages/SalesHistoryPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { Layout } from './components/Layout';
 import { useStore } from './hooks/useStore';
 
@@ -36,7 +37,8 @@ function AppRoutes() {
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/sales" element={<SalesHistoryPage />} />
         <Route path="/integration" element={<IntegrationPage />} />
-        <Route path="/tax-config" element={<TaxConfigPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/tax-config" element={<Navigate to="/settings" replace />} />
       </Route>
       <Route path="/setup" element={<Navigate to="/dashboard" replace />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

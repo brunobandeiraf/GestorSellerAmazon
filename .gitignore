@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+api/node_modules/
+frontend/node_modules/
+
+# Environment files (contain secrets)
+.env
+api/.env
+frontend/.env
+
+# Build outputs
+api/dist/
+frontend/dist/
+
+# Prisma
+api/prisma/migrations/**/migration_lock.toml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+pgdata/
+
+# Coverage
+coverage/

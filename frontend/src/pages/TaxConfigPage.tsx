@@ -223,11 +223,16 @@ export function TaxConfigPage() {
       }
 
       await put<ApiResponse<TaxConfig>>('/api/store/tax', payload);
-      setSuccessMessage('Configuração de impostos salva com sucesso!');
-      // After first setup, allow navigation to integration
+      
+      // After first setup, redirect directly to dashboard
       if (isFirstSetup) {
-        setIsFirstSetup(true); // keep showing the continue button
+        navigate('/dashboard');
+        // Force page reload to re-evaluate useStore (hasStore will now be true)
+        window.location.href = '/dashboard';
+        return;
       }
+      
+      setSuccessMessage('Configuração de impostos salva com sucesso!');
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.details && err.details.length > 0) {
@@ -247,10 +252,6 @@ export function TaxConfigPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }
-
-  function handleContinue() {
-    navigate('/integration');
   }
 
   if (loading) {
@@ -354,16 +355,6 @@ export function TaxConfigPage() {
         >
           {isSubmitting ? 'Salvando...' : 'Salvar Configuração'}
         </button>
-
-        {isFirstSetup && successMessage && (
-          <button
-            type="button"
-            onClick={handleContinue}
-            style={styles.buttonSecondary}
-          >
-            Continuar para Integração
-          </button>
-        )}
       </form>
     </div>
   );
