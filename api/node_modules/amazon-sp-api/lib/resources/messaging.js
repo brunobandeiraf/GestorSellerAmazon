@@ -1,0 +1,22 @@
+module.exports = {
+   messaging:{
+    __versions:[
+      'v1'
+    ],
+    __operations:[
+      'getMessagingActionsForOrder',
+      'confirmCustomizationDetails',
+      'createConfirmDeliveryDetails',
+      'createLegalDisclosure',
+      'createNegativeFeedbackRemoval',
+      'createConfirmOrderDetails',
+      'createConfirmServiceDetails',
+      'CreateAmazonMotors',
+      'CreateWarranty',
+      'GetAttributes',
+      'createDigitalAccessKey',
+      'createUnexpectedProblem'
+    ],
+    ...require('./versions/messaging/messaging_v1')
+  }
+};
